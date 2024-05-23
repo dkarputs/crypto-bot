@@ -21,8 +21,6 @@ async def func_enter_fav_curr(message: types.Message, state: FSMContext):
     pairs = [x.strip().upper() for x in pairs]
     pairs = pairs[:5]
     set_favorite_pairs(message.from_user.id, text, get_connection())
-    # await state.update_data(fav_pairs=pairs)
-    # await message.answer(f'You have entered the following favorite currency pairs: {", ".join(pairs)}')
     kb = [
         [types.InlineKeyboardButton(text='Add another', callback_data='add_fav_pairs')],
         [types.InlineKeyboardButton(text='View list', callback_data='view_fav_pairs')],
