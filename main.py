@@ -6,7 +6,7 @@ from aiogram import Bot, Dispatcher, types
 from binance.client import Client
 import os
 
-from db.base import create_table
+from db.base import create_table, get_connection
 from handlers import register_handlers, callback_handler
 
 
@@ -18,7 +18,7 @@ async def main():
     client = Client(api_key=os.getenv('BINANCE_API_KEY'), api_secret=os.getenv('BINANCE_SECRET_KEY'))
     con = sqlite3.connect("database.db")
 
-    create_table(con)
+    create_table(get_connection())
 
     register_handlers(dp)
     callback_handler(dp)
