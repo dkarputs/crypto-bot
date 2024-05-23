@@ -39,6 +39,12 @@ def get_favorite_pairs(user_id, con):
     result = cursor.fetchone()
     return result[0] if result else None
 
+
+def set_favorite_pairs(user_id, favorite_pairs, con):
+    cursor = con.cursor()
+    cursor.execute("UPDATE users SET favorite_pairs=? WHERE user_id=?", (favorite_pairs, user_id))
+    con.commit()
+
 # async def get_user_portfolio(user_id, db):
 #     async with db.cursor() as cursor:
 #         await cursor.execute("SELECT portfolio FROM users WHERE user_id=?", (user_id,))
