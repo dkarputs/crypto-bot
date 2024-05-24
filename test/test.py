@@ -1,57 +1,122 @@
 import asyncio
-import unittest
 
 import pytest
-from unittest.mock import AsyncMock
-from binance import AsyncClient
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch, AsyncMock, MagicMock
 
-from services import get_top_list
-from services.binance_api import get_info_currency, get_account_info
+from aiogram import types
 
-
-# @pytest.mark.asyncio
-# async def test_get_info_currency_success():
-#     symbol = 'BTC'
-#     mock_client = AsyncMock(spec=AsyncClient)
-#     mock_client.get_ticker.return_value = {'lastPrice': '30000.0'}
-#     symbol_info, last_price = await get_info_currency(symbol)
-#     assert last_price >= '30000.0'
-#
-#
-# @pytest.mark.asyncio
-# async def test_get_account_info():
-#     # Создаем mock для функции get_client
-#     mock_client = AsyncMock()
-#     mock_client.get_account = AsyncMock(return_value=asyncio.Future())
-#     mock_client.get_account.return_value.set_result({'account_id': '12345', 'balance': 1000})
-#
-#     with patch('services.binance_api.get_client', return_value=mock_client):
-#         # Вызываем тестируемую функцию
-#         account_info = await get_account_info()
-#
-#         # Проверяем, что результат соответствует ожидаемому
-#         assert account_info == {'account_id': '12345', 'balance': 1000}
-#         # Проверяем, что get_account был вызван один раз
-#         mock_client.get_account.assert_awaited_once()
+from handlers.callback_handler import to_back
+from services.binance_api import get_account_info, get_info_currency
+from services.get_top_list import main
+from services.service_forever_currency import (
+    get_forever_list,
+    send_request_for_add_new_pair,
+    send_request_for_delete_pair,
+)
 
 
-class TestMainFunction(unittest.TestCase):
+@pytest.fixture
+def mock_get_connection():
+    with patch("services.service_forever_currency.get_connection") as mock_conn:
+        yield mock_conn
+
+
+@pytest.fixture
+def mock_get_favorite_pairs(mock_get_connection):
+    with patch("services.service_forever_currency.get_favorite_pairs") as mock_get_pairs:
+        yield mock_get_pairs
+
+
+@pytest.fixture
+def mock_add_new_favorite_pair(mock_get_connection):
+    with patch("services.service_forever_currency.add_new_favorite_pair") as mock_add_pair:
+        yield mock_add_pair
+
+
+@pytest.fixture
+def mock_delete_favorite_pair(mock_get_connection):
+    with patch("services.service_forever_currency.delete_favorite_pair") as mock_delete_pair:
+        yield mock_delete_pair
+
+
+def test_get_forever_list_no_pairs(mock_get_favorite_pairs):
+    mock_get_favorite_pairs.return_value = None
+    result = get_forever_list(123)
+    assert result is None
+
+
+def test_get_forever_list_with_pairs(mock_get_favorite_pairs):
+    mock_get_favorite_pairs.return_value = ["BTCUSDT", "ETHUSDT"]
+    result = get_forever_list(123)
+    assert result == ["BTCUSDT", "ETHUSDT"]
+
+
+def test_send_request_for_add_new_pair_success(mock_add_new_favorite_pair):
+    mock_add_new_favorite_pair.return_value = True
+    result = send_request_for_add_new_pair(123, "BNBUSDT")
+    assert result is True
+
+
+def test_send_request_for_add_new_pair_failure(mock_add_new_favorite_pair):
+    mock_add_new_favorite_pair.return_value = False
+    result = send_request_for_add_new_pair(123, "BNBUSDT")
+    assert result is False
+
+
+def test_send_request_for_delete_pair_success(mock_delete_favorite_pair):
+    mock_delete_favorite_pair.return_value = True
+    result = send_request_for_delete_pair(123, "BTCUSDT")
+    assert result is True
+
+
+def test_send_request_for_delete_pair_failure(mock_delete_favorite_pair):
+    mock_delete_favorite_pair.return_value = False
+    result = send_request_for_delete_pair(123, "BTCUSDT")
+    assert result is False
+
+
+class TestCallbackHandler:
+    @patch('aiogram.types.CallbackQuery')
+    async def test_to_back(self, mock_callback_query):
+        mock_callback_query.from_user.first_name = "John"
+        mock_callback_query.message.edit_text = AsyncMock()
+        mock_callback_query.message.reply_markup = MagicMock()
+        await to_back(mock_callback_query)
+        mock_callback_query.message.edit_text.assert_called_once_with("Hi, John! You are in main menu: ",
+                                                                      reply_markup=mock_callback_query.message.reply_markup)
+
+
+class TestBinanceApi:
+    @patch('services.binance_api.get_client')
+    async def test_get_account_info(self, mock_get_client):
+        mock_get_client.return_value.get_account.return_value = "Account info"
+        result = await get_account_info()
+        assert result == "Account info"
+
+    @patch('services.binance_api.AsyncClient.create')
+    async def test_get_info_currency(self, mock_create):
+        mock_create.return_value.get_exchange_info.return_value = {
+            "symbols": [{"symbol": "BTCUSDT"}, {"symbol": "ETHUSDT"}]}
+        mock_create.return_value.get_ticker.return_value = {"lastPrice": "29500.50"}
+        result = await get_info_currency("BTC")
+        assert result == ({"symbol": "BTCUSDT"}, "29500.50")
+
+
+class TestBinanceTop50:
     @patch('requests.get')
-    def test_main(self, mock_get):
-        mock_get.return_value.json.return_value = [
-            {'symbol': 'BTCUSDT', 'quoteVolume': '100', 'askPrice': '50000', 'priceChangePercent': '5'},
-            {'symbol': 'ETHUSDT', 'quoteVolume': '50', 'askPrice': '2000', 'priceChangePercent': '3'},
-            # Add more mock data as needed
+    def test_main_success(self, mock_get):
+        mock_data = [
+            {"symbol": "BTCUSDT", "askPrice": "29500.50", "priceChangePercent": "0.35", "quoteVolume": "200000000"},
+            {"symbol": "ETHUSDT", "askPrice": "1850.25", "priceChangePercent": "-1.20", "quoteVolume": "150000000"},
+            {"symbol": "BNBUSDT", "askPrice": "240.15", "priceChangePercent": "0.85", "quoteVolume": "100000000"},
         ]
+        mock_get.return_value.json.return_value = mock_data
+
+        result = main()
 
         expected_output = (
-            "1. BTCUSDT - Price: 50000 USDT, Change in 24h: 5%\n"
-            "2. ETHUSDT - Price: 2000 USDT, Change in 24h: 3%\n"
-            # Add more expected output as needed
+            "1. BTCUSDT - Price: 29500.50 USDT, Change in 24h: 0.35%\n"
+            "2. ETHUSDT - Price: 1850.25 USDT, Change in 24h: -1.20%\n"
+            "3. BNBUSDT - Price: 240.15 USDT, Change in 24h: 0.85%"
         )
-
-        self.assertEqual(get_top_list.main().strip(), expected_output.strip())
-
-if __name__ == '__main__':
-    unittest.main()
+        assert result.strip() == expected_output

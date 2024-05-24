@@ -12,3 +12,6 @@ def main():
                   i, x in enumerate(usdt_pairs)][:50]
     top_50 = '\n'.join(usdt_pairs)
     return top_50
+
+if __name__ == '__main__':
+    print(main())
