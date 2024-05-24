@@ -1,3 +1,5 @@
+import re
+
 from aiogram import Router, F, types
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardButton
@@ -48,6 +50,10 @@ async def delete_currency(callback: types.CallbackQuery, state: FSMContext):
 
 @router.message(AddFavCurrenciesStates.waiting_for_enter)
 async def process_add_favorite_currency_request(message: types.Message, state: FSMContext):
+    if re.match(r'^[A-Z]{2,4}$', message.text) is None:
+        await message.answer('Invalid currency pair! Please, try again')
+        await state.set_state(AddFavCurrenciesStates.waiting_for_enter)
+        return None
     result = send_request_for_add_new_pair(message.from_user.id, message.text)
     await state.clear()
     builder = InlineKeyboardBuilder()
@@ -64,7 +70,12 @@ async def process_add_favorite_currency_request(message: types.Message, state: F
 async def forever_currency_description(callback: types.CallbackQuery, state: FSMContext):
     symbol = callback.data.split(':')[1]
     await state.set_data({"symbol": symbol})
-    result = await get_info_currency(symbol)
+    print(symbol)
+    try:
+        result = await get_info_currency(symbol)
+    except Exception as e:
+        print(e)
+        result = None
     builder = InlineKeyboardBuilder()
     builder.row(InlineKeyboardButton(text='Delete this currency', callback_data='delete_currency'))
     builder.row(InlineKeyboardButton(text='Back to forever list', callback_data='forever_user_list'))
